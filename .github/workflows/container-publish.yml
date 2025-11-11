@@ -1,10 +1,5 @@
 name: Publish Container Image
 
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
 on:
   schedule:
     - cron: '43 8 * * *'
@@ -19,30 +14,18 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-      # This is used to complete the identity challenge
-      # with sigstore/fulcio when running outside of PRs.
-      id-token: write
 
     steps:
       - name: Computed environment variables
         run: |
-          echo "skopeo_inspect=podman run --secret ${{ env.AUTH_SECRET }} quay.io/skopeo/stable:latest inspect --authfile /run/secrets/${{ env.AUTH_SECRET }}" >> "$GITHUB_ENV"
-          
+          echo "skopeo_inspect=podman run --secret ${{ env.AUTH_SECRET }} quay.io/skopeo/stable:latest inspect --authfile /run/secrets/${{ env.AUTH_SECRET }}" >> "$GITHUB_ENV"      
           
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: github-publish
-          
-      - name: Rebase onto `main`
-        uses: martincostello/rebaser@v3.0.0
-        with:
-          branch: main
 
       # This step publishes a $REGISTRY_AUTH_FILE environment variable
       - name: Log in to GitHub Container Registry
@@ -61,7 +44,7 @@ jobs:
         id: base_image
         run: |
           # Extract base image name from Containerfile
-          BASE_IMAGE=$(head -1 Containerfile | cut -d ' ' -f 2)
+          BASE_IMAGE=$(grep -m1 FROM Containerfile | cut -d ' ' -f 2)
           echo "Base Image is: $BASE_IMAGE"
           echo "name=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
           VERSION=$(${{ env.skopeo_inspect }} --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
@@ -71,7 +54,9 @@ jobs:
       - name: Set target label
         id: target_label
         run: |
-          TARGET_LABEL=base-${{ steps.base_image.outputs.version }}
+          base_version=${{ steps.base_image.outputs.version }}
+          sha=${{ github.sha }}
+          TARGET_LABEL=base-${base_version:0:10}-git-${sha:0:10}
           echo "Target Label: $TARGET_LABEL"
           echo "label=$TARGET_LABEL" >> "$GITHUB_OUTPUT"
 
@@ -79,7 +64,6 @@ jobs:
         id: check
         # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
         run: |
-          echo ${{ env.skopeo_inspect }} --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}
           if ${{ env.skopeo_inspect }} --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
             echo "Build already exists, skipping build."
             SHOULD_BUILD=false
@@ -98,8 +82,6 @@ jobs:
           containerfiles: |
             ./Containerfile
 
-      - run: echo "${{ toJson(steps) }}"
-
       - name: Push To GHCR
         uses: redhat-actions/push-to-registry@v2
         id: push
@@ -113,58 +95,3 @@ jobs:
             --disable-content-trust
 
       - run: echo "${{ toJson(steps) }}"
-
-      # # Install the cosign tool except on PR
-      # # https://github.com/sigstore/cosign-installer
-      # - name: Install cosign
-      #   if: steps.check.outputs.should_build == 'true'
-      #   uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 #v3.5.0
-      #   with:
-      #     cosign-release: 'v2.2.4'
-
-      
-
-      # # Set up BuildKit Docker container builder to be able to build
-      # # multi-platform images and export cache
-      # # https://github.com/docker/setup-buildx-action
-      # - name: Set up Docker Buildx
-      #   if: steps.check.outputs.should_build == 'true'
-      #   uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
-
-      # # Extract metadata (tags, labels) for Docker
-      # # https://github.com/docker/metadata-action
-      # - name: Extract Docker metadata
-      #   id: meta
-      #   if: steps.check.outputs.should_build == 'true'
-      #   uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
-      #   with:
-      #     images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
-      # # Build and push Docker image with Buildx (don't push on PR)
-      # # https://github.com/docker/build-push-action
-      # - name: Build and push Docker image
-      #   id: build-and-push
-      #   if: steps.check.outputs.should_build == 'true'
-      #   uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
-      #   with:
-      #     context: .
-      #     push: ${{ github.event_name != 'pull_request' }}
-      #     tags: ${{ steps.meta.outputs.tags }}
-      #     labels: ${{ steps.meta.outputs.labels }}
-      #     cache-from: type=gha
-      #     cache-to: type=gha,mode=max
-
-      # # Sign the resulting Docker image digest except on PRs.
-      # # This will only write to the public Rekor transparency log when the Docker
-      # # repository is public to avoid leaking data.  If you would like to publish
-      # # transparency data even for private images, pass --force to cosign below.
-      # # https://github.com/sigstore/cosign
-      # - name: Sign the published Docker image
-      #   if: steps.check.outputs.should_build == 'true'
-      #   env:
-      #     # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
-      #     TAGS: ${{ steps.meta.outputs.tags }}
-      #     DIGEST: ${{ steps.build-and-push.outputs.digest }}
-      #   # This step uses the identity token to provision an ephemeral certificate
-      #   # against the sigstore community Fulcio instance.
-      #   run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
