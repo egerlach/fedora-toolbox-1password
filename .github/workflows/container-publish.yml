@@ -15,8 +15,7 @@ env:
   REGISTRY_PASSWORD: ${{ github.token }}
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
   IMAGE_BASENAME: fedora-toolbox-1password
-  
-
+  AUTH_SECRET: registry_auth_file
 
 jobs:
   build:
@@ -30,9 +29,11 @@ jobs:
       id-token: write
 
     steps:
-      - name: Compute full image name - write to env
+      - name: Computed environment variables
         run: |
           echo "IMAGE_NAME=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_BASENAME }}" >> "$GITHUB_ENV"
+          echo "skopeo_inspect=podman run --secret ${{ env.AUTH_SECRET }} quay.io/skopeo/stable:latest inspect --authfile /run/secrets/${{ env.AUTH_SECRET }}" >> "$GITHUB_ENV"
+          
           
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,6 +45,7 @@ jobs:
         with:
           branch: main
 
+      # This step publishes a $REGISTRY_AUTH_FILE environment variable
       - name: Log in to GitHub Container Registry
         uses: redhat-actions/podman-login@v1
         with:
@@ -54,7 +56,7 @@ jobs:
       # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
       - name: Create secret from podman login
         run: |
-          podman secret create registry_auth_file $REGISTRY_AUTH_FILE
+          podman secret create ${{ env.AUTH_SECRET }} $REGISTRY_AUTH_FILE
 
       - name: Get base image version
         id: base_image
@@ -63,7 +65,7 @@ jobs:
           BASE_IMAGE=$(head -1 Containerfile | cut -d ' ' -f 2)
           echo "Base Image is: $BASE_IMAGE"
           echo "name=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
-          VERSION=$(podman run --secret registry_auth_file quay.io/skopeo/stable:latest inspect --authfile /run/secrets/registry_auth_file --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
+          VERSION=$(${{ env.skopeo_inspect }} --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
           echo "Base Image Version is: $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -78,8 +80,8 @@ jobs:
         id: check
         # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
         run: |
-          echo podman run --secret registry_auth_file quay.io/skopeo/stable:latest inspect --authfile /run/secrets/registry_auth_file --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}
-          if podman run --secret registry_auth_file quay.io/skopeo/stable:latest inspect --authfile /run/secrets/registry_auth_file --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
+          echo ${{ env.skopeo_inspect }} --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}
+          if ${{ env.skopeo_inspect }} --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
             echo "Build already exists, skipping build."
             SHOULD_BUILD=false
           else
@@ -103,6 +105,7 @@ jobs:
         uses: redhat-actions/push-to-registry@v2
         id: push
         with:
+          registry: ${{ env.IMAGE_REGISTRY }}
           image: ${{ steps.build_image.outputs.image }}
           tags: ${{ steps.build_image.outputs.tags }}
           username: ${{ env.REGISTRY_USER }}
