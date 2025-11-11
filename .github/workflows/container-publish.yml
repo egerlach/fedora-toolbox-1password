@@ -14,7 +14,7 @@ env:
   REGISTRY_USER: ${{ github.actor }}
   REGISTRY_PASSWORD: ${{ github.token }}
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
-  IMAGE_NAME: ${{ env.IMAGE_REGISTRY }}/fedora-toolbox-1password
+  IMAGE_BASENAME: fedora-toolbox-1password
   
 
 
@@ -30,6 +30,10 @@ jobs:
       id-token: write
 
     steps:
+      - name: Compute full image name - write to env
+        run: |
+          echo "IMAGE_NAME=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_BASENAME }}" >> "$GITHUB_ENV"
+          
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
