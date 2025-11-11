@@ -72,6 +72,8 @@ jobs:
       - name: Check if that version of this image exists
         id: check
         run: |
+          echo podman run -v ${XDG_RUNTIME_DIR}/containers/auth.json:${XDG_RUNTIME_DIR}/containers/auth.json quay.io/skopeo/stable:latest inspect --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}
+          ls -l $XDG_RUNTIME_DIR/containers/auth.json
           if podman run -v ${XDG_RUNTIME_DIR}/containers/auth.json:${XDG_RUNTIME_DIR}/containers/auth.json quay.io/skopeo/stable:latest inspect --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
             echo "Build already exists, skipping build."
             SHOULD_BUILD=false
@@ -99,6 +101,8 @@ jobs:
           password: ${{ env.REGISTRY_PASSWORD }}
           extra-args: |
             --disable-content-trust
+
+      - run: echo "${{ toJson(steps) }}"
 
       # # Install the cosign tool except on PR
       # # https://github.com/sigstore/cosign-installer
