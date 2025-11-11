@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: '43 8 * * *'
   push:
+    paths-ignore:
+      - '*.md'
+      - 'LICENSE'
 
 env:
   REGISTRY_USER: ${{ github.actor }}
