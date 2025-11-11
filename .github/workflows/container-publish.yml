@@ -14,7 +14,7 @@ env:
   REGISTRY_USER: ${{ github.actor }}
   REGISTRY_PASSWORD: ${{ github.token }}
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
-  IMAGE_BASENAME: fedora-toolbox-1password
+  IMAGE_NAME: fedora-toolbox-1password
   AUTH_SECRET: registry_auth_file
 
 jobs:
@@ -31,7 +31,6 @@ jobs:
     steps:
       - name: Computed environment variables
         run: |
-          echo "IMAGE_NAME=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_BASENAME }}" >> "$GITHUB_ENV"
           echo "skopeo_inspect=podman run --secret ${{ env.AUTH_SECRET }} quay.io/skopeo/stable:latest inspect --authfile /run/secrets/${{ env.AUTH_SECRET }}" >> "$GITHUB_ENV"
           
           
