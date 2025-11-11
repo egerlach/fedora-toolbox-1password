@@ -63,7 +63,7 @@ jobs:
           BASE_IMAGE=$(head -1 Containerfile | cut -d ' ' -f 2)
           echo "Base Image is: $BASE_IMAGE"
           echo "name=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
-          VERSION=$(podman run --secret registry_auth_file quay.io/skopeo/stable:latest --authfile /run/secrets/registry_auth_file inspect --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
+          VERSION=$(podman run --secret registry_auth_file quay.io/skopeo/stable:latest inspect --authfile /run/secrets/registry_auth_file --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
           echo "Base Image Version is: $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -78,8 +78,8 @@ jobs:
         id: check
         # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
         run: |
-          echo podman run --secret registry_auth_file quay.io/skopeo/stable:latest --authfile /run/secrets/registry_auth_file inspect --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}
-          if podman run --secret registry_auth_file quay.io/skopeo/stable:latest --authfile /run/secrets/registry_auth_file inspect --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
+          echo podman run --secret registry_auth_file quay.io/skopeo/stable:latest inspect --authfile /run/secrets/registry_auth_file --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}
+          if podman run --secret registry_auth_file quay.io/skopeo/stable:latest inspect --authfile /run/secrets/registry_auth_file --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
             echo "Build already exists, skipping build."
             SHOULD_BUILD=false
           else
