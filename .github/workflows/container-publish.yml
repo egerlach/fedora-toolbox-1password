@@ -51,6 +51,11 @@ jobs:
           password: ${{ env.REGISTRY_PASSWORD }}
           registry: ${{ env.IMAGE_REGISTRY }}
 
+      # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
+      - name: Create secret from podman login
+        run: |
+          podman secret create registry_auth_file $REGISTRY_AUTH_FILE
+
       - name: Get base image version
         id: base_image
         run: |
@@ -58,7 +63,7 @@ jobs:
           BASE_IMAGE=$(head -1 Containerfile | cut -d ' ' -f 2)
           echo "Base Image is: $BASE_IMAGE"
           echo "name=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
-          VERSION=$(podman run -v ${XDG_RUNTIME_DIR}/containers/auth.json:${XDG_RUNTIME_DIR}/containers/auth.json quay.io/skopeo/stable:latest inspect --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
+          VERSION=$(podman run --secret registry_auth_file quay.io/skopeo/stable:latest --authfile /run/secrets/registry_auth_file inspect --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
           echo "Base Image Version is: $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -71,10 +76,10 @@ jobs:
 
       - name: Check if that version of this image exists
         id: check
+        # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
         run: |
-          echo podman run -v ${XDG_RUNTIME_DIR}/containers/auth.json:${XDG_RUNTIME_DIR}/containers/auth.json quay.io/skopeo/stable:latest inspect --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}
-          ls -l $XDG_RUNTIME_DIR/containers/auth.json
-          if podman run -v ${XDG_RUNTIME_DIR}/containers/auth.json:${XDG_RUNTIME_DIR}/containers/auth.json quay.io/skopeo/stable:latest inspect --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
+          echo podman run --secret registry_auth_file quay.io/skopeo/stable:latest --authfile /run/secrets/registry_auth_file inspect --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}
+          if podman run --secret registry_auth_file quay.io/skopeo/stable:latest --authfile /run/secrets/registry_auth_file inspect --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
             echo "Build already exists, skipping build."
             SHOULD_BUILD=false
           else
@@ -90,6 +95,8 @@ jobs:
           tags: latest ${{ steps.target_label.outputs.label }}
           containerfiles: |
             ./Containerfile
+
+      - run: echo "${{ toJson(steps) }}"
 
       - name: Push To GHCR
         uses: redhat-actions/push-to-registry@v2
