@@ -22,7 +22,8 @@ jobs:
     steps:
       - name: Computed environment variables
         run: |
-          echo "skopeo_inspect=podman run --secret ${{ env.AUTH_SECRET }} quay.io/skopeo/stable:latest inspect --authfile /run/secrets/${{ env.AUTH_SECRET }}" >> "$GITHUB_ENV"      
+          echo "FULL_IMAGE=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}" >> "$GITHUB_ENV"
+          echo "skopeo_inspect=podman run --secret ${{ env.AUTH_SECRET }} quay.io/skopeo/stable:latest inspect --authfile /run/secrets/${{ env.AUTH_SECRET }}" >> "$GITHUB_ENV"
           
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -64,7 +65,7 @@ jobs:
         id: check
         # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
         run: |
-          if ${{ env.skopeo_inspect }} --format "{{.Name}}" docker://${{ env.IMAGE_NAME }}:${{ steps.target_label.outputs.label }}; then
+          if ${{ env.skopeo_inspect }} --format "{{.Name}}" docker://${{ env.FULL_IMAGE }}:${{ steps.target_label.outputs.label }}; then
             echo "Build already exists, skipping build."
             SHOULD_BUILD=false
           else
