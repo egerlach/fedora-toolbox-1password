@@ -12,7 +12,6 @@ on:
 
 env:
   REGISTRY_USER: ${{ github.actor }}
-  REGISTRY_PASSWORD: ${{ github.token }}
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
   IMAGE_NAME: fedora-toolbox-1password
   AUTH_SECRET: registry_auth_file
@@ -51,7 +50,7 @@ jobs:
         uses: redhat-actions/podman-login@v1
         with:
           username: ${{ env.REGISTRY_USER }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+          password: ${{ secrets.GITHUB_TOKEN }}
           registry: ${{ steps.registry_case.outputs.lowercase }}
 
       # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
@@ -137,7 +136,7 @@ jobs:
           tags: ${{ steps.build_image.outputs.tags }}
           registry: ${{ steps.registry_case.outputs.lowercase }}
           username: ${{ env.REGISTRY_USER }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+          password: ${{ secrets.GITHUB_TOKEN }}
             
       # Sign container
       - name: Install cosign
