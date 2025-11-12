@@ -119,7 +119,7 @@ jobs:
           containerfiles: |
             ./ContainerFiles/${{ matrix.containerfile }}
           image: ${{ matrix.containerfile }}
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: latest ${{ steps.target_tag.outputs.tag }}
           labels: ${{ steps.meta.outputs.labels }}
           oci: true
 
