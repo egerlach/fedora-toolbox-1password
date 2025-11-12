@@ -10,5 +10,5 @@ COPY ../scripts/distrobox-shims.sh /
 COPY ../packages/egerlach-toolbox.packages /
 
 # Run the setup scripts
-RUN chmod +x fedora-example.sh distrobox-shims.sh && /fedora-example.sh
-RUN rm /fedora-example.sh /distrobox-shims.sh /fedora-example.packages
+RUN chmod +x egerlach-toolbox.sh distrobox-shims.sh && /egerlach-toolbox.sh
+RUN rm /egerlach-toolbox.sh /distrobox-shims.sh /egerlach-toolbox.packages

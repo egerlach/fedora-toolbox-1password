@@ -98,6 +98,8 @@ jobs:
         if: steps.check.outputs.should_build == 'true'
         id: meta
         with:
+          flavor: |
+            latest=true
           images: |
             ${{ matrix.containerfile }}
           labels: |
