@@ -63,7 +63,7 @@ jobs:
         id: base_image
         run: |
           # Extract base image name from Containerfile
-          BASE_IMAGE=$(grep -m1 FROM Containerfile | cut -d ' ' -f 2)
+          BASE_IMAGE=$(grep -m1 FROM ContainerFiles/${{ matrix.containerfile }} | cut -d ' ' -f 2)
           echo "Base Image is: $BASE_IMAGE"
           echo "name=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
           VERSION=$(.github/scripts/skopeo_inspect.sh --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
