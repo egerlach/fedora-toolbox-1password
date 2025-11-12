@@ -7,8 +7,9 @@ LABEL com.github.containers.toolbox="true" \
 COPY ../files/1password.repo /etc/yum.repos.d/
 COPY ../scripts/egerlach-toolbox.sh /
 COPY ../scripts/distrobox-shims.sh /
+COPY ../scripts/install-protonmail-bridge.sh /
 COPY ../packages/egerlach-toolbox.packages /
 
 # Run the setup scripts
-RUN chmod +x egerlach-toolbox.sh distrobox-shims.sh && /egerlach-toolbox.sh
-RUN rm /egerlach-toolbox.sh /distrobox-shims.sh /egerlach-toolbox.packages
+RUN chmod +x egerlach-toolbox.sh distrobox-shims.sh install-protonmail-bridge.sh && /egerlach-toolbox.sh
+RUN rm /egerlach-toolbox.sh /distrobox-shims.sh /egerlach-toolbox.packages /install-protonmail-bridge.sh
