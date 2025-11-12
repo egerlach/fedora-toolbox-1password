@@ -1,20 +1,21 @@
 name: build-boxkit
 on:
   workflow_dispatch: # allow manually triggering builds
-  pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
     paths-ignore: # don't rebuild on documentation change
       - '**.md'
+      - LICENSE
   schedule:
-    - cron: '0 0 * * TUE'
+    - cron: '43 8 * * *'
 
 env:
-    IMAGE_TAGS: latest
-    IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  REGISTRY_USER: ${{ github.actor }}
+  REGISTRY_PASSWORD: ${{ github.token }}
+  IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  IMAGE_NAME: fedora-toolbox-1password
+  AUTH_SECRET: registry_auth_file
 
 jobs:
   push-ghcr:
@@ -28,35 +29,15 @@ jobs:
       fail-fast: false
       matrix:
         containerfile: 
-          - boxkit
-       #- fedora-example # Included as an example to demonstrate multi-image builds, uncomment to build the fedora-example container too
+          - egerlach-toolbox
     steps:
-      # Clone code to runner
+      - name: Computed environment variables
+        run: |
+          echo "FULL_IMAGE=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}" >> "$GITHUB_ENV"
+          
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
-      # Build metadata
-      - name: Image Metadata
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
-        id: meta
-        with:
-          images: |
-            ${{ matrix.containerfile }}
-          labels: |
-            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ublue-os/boxkit/main/README.md
-
-      # Build image using Buildah action
-      - name: Build Image
-        id: build_image
-        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2
-        with:
-          containerfiles: |
-            ./ContainerFiles/${{ matrix.containerfile }}
-          image: ${{ matrix.containerfile }}
-          tags: ${{ env.IMAGE_TAGS }}
-          labels: ${{ steps.meta.outputs.labels }}
-          oci: true
-          
       # Workaround bug where capital letters in your GitHub username make it impossible to push to GHCR.
       # https://github.com/macbre/push-to-ghcr/issues/12
       - name: Lowercase Registry
@@ -65,14 +46,96 @@ jobs:
         with:
           string: ${{ env.IMAGE_REGISTRY }}
 
+      # This step publishes a $REGISTRY_AUTH_FILE environment variable
+      - name: Log in to GitHub Container Registry
+        uses: redhat-actions/podman-login@v1
+        with:
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+          registry: ${{ steps.registry_case.outputs.lowercase }}
+
+      # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
+      - name: Create secret from podman login
+        run: |
+          podman secret create ${{ env.AUTH_SECRET }} $REGISTRY_AUTH_FILE
+
+      - name: Get base image version
+        id: base_image
+        run: |
+          # Extract base image name from Containerfile
+          BASE_IMAGE=$(grep -m1 FROM Containerfile | cut -d ' ' -f 2)
+          echo "Base Image is: $BASE_IMAGE"
+          echo "name=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
+          VERSION=$(.github/scripts/skopeo_inspect.sh --format "{{slice .Digest 7}}" docker://$BASE_IMAGE)
+          echo "Base Image Version is: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set target tag
+        id: target_tag
+        run: |
+          base_version=${{ steps.base_image.outputs.version }}
+          sha=${{ github.sha }}
+          TARGET_TAG=base-${base_version:0:10}-git-${sha:0:10}
+          echo "Target Tag: $TARGET_TAG"
+          echo "tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Check if that version of this image exists
+        id: check
+        # Using secret for skopeo login as per: https://github.com/containers/image_build/blob/main/skopeo/README.md
+        run: |
+          if .github/scripts/skopeo_inspect.sh --format "{{.Name}}" docker://${{ env.FULL_IMAGE }}:${{ steps.target_tag.outputs.tag }}; then
+            echo "Build already exists, skipping build."
+            SHOULD_BUILD=false
+          else
+            echo "Build does not exist, building…"
+            SHOULD_BUILD=true
+          fi
+          echo "should_build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
+
+      # Build metadata
+      - name: Image Metadata
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
+        if: steps.check.outputs.should_build == 'true'
+        id: meta
+        with:
+          images: |
+            ${{ matrix.containerfile }}
+          labels: |
+            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/egerlach/toolbox/main/README.md
+          tags: |
+              type=schedule
+              type=ref,event=branch
+              type=ref,event=tag
+              type=ref,event=pr
+              type=raw,value=${{ steps.target_tag.outputs.tag }}
+
+
+      - name: Buildah Action
+        id: build_image
+        if: steps.check.outputs.should_build == 'true'
+        uses: redhat-actions/buildah-build@v2
+        with:
+          containerfiles: |
+            ./ContainerFiles/${{ matrix.containerfile }}
+          image: ${{ matrix.containerfile }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          oci: true
+
+      - name: Echo outputs
+        run: |
+          echo "${{ toJSON(steps) }}"
+
+      - name: Fail the build
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setFailed("Stopping here.")
+
       # Push the image to GHCR (Image Registry)
       - name: Push To GHCR
         uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
-        if: github.event_name != 'pull_request'
         id: push
-        env:
-          REGISTRY_USER: ${{ github.actor }}
-          REGISTRY_PASSWORD: ${{ github.token }}
         with:
           image: ${{ steps.build_image.outputs.image }}
           tags: ${{ steps.build_image.outputs.tags }}
@@ -80,19 +143,12 @@ jobs:
           username: ${{ env.REGISTRY_USER }}
           password: ${{ env.REGISTRY_PASSWORD }}
             
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-            
       # Sign container
       - name: Install cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
 
       - name: Sign container image
-        if: github.event_name != 'pull_request'
+        if: steps.check.outputs.should_build == 'true'
         run: |
           cosign sign -y --key env://COSIGN_PRIVATE_KEY ${{ steps.registry_case.outputs.lowercase }}/${{ matrix.containerfile }}@${TAGS}
         env:
@@ -102,4 +158,4 @@ jobs:
 
       - name: Echo outputs
         run: |
-          echo "${{ toJSON(steps.push.outputs) }}"
+          echo "${{ toJSON(steps) }}"
