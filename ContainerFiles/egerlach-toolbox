@@ -1,8 +1,14 @@
 FROM ghcr.io/ublue-os/fedora-toolbox:latest
 
-RUN rpm --import https://downloads.1password.com/linux/keys/1password.asc
+LABEL com.github.containers.toolbox="true" \
+      usage="egerlach's toolbox" \
+      maintainer="eric@gerlach.ca"
 
-COPY 1password.repo /etc/yum.repos.d/
+COPY ../files/1password.repo /etc/yum.repos.d/
+COPY ../scripts/egerlach-toolbox.sh /
+COPY ../scripts/distrobox-shims.sh /
+COPY ../packages/egerlach-toolbox.packages /
 
-RUN dnf -y install 1password 1password-cli && \
-    dnf clean all
+# Run the setup scripts
+RUN chmod +x fedora-example.sh distrobox-shims.sh && /fedora-example.sh
+RUN rm /fedora-example.sh /distrobox-shims.sh /fedora-example.packages
